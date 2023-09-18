@@ -1,3 +1,8 @@
+<br/>
+<p align="center">
+<img src="./images/puppy-raffle.png" width="500" alt="puppy-raffle">
+</p>
+<br/>
 
 # Puppy Raffle
 
