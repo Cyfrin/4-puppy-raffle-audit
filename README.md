@@ -17,7 +17,6 @@ This project is to enter a raffle to win a cute dog NFT. The protocol should do 
   - [Quickstart](#quickstart)
     - [Optional Gitpod](#optional-gitpod)
 - [Usage](#usage)
-  - [Deploy (local)](#deploy-local)
   - [Testing](#testing)
     - [Test Coverage](#test-coverage)
 - [Audit Scope Details](#audit-scope-details)
@@ -35,8 +34,8 @@ This project is to enter a raffle to win a cute dog NFT. The protocol should do 
 
 ```
 git clone https://github.com/Cyfrin/4-puppy-raffle-audit
-cd 3-passwordstore-audit
-forge build
+cd 4-puppy-raffle-audit
+make install
 ```
 
 ### Optional Gitpod
@@ -46,22 +45,6 @@ If you can't or don't want to run and install locally, you can work with this re
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#github.com/Cyfrin/3-passwordstore-audit)
 
 # Usage
-
-## Deploy (local)
-
-1. Start a local node
-
-```
-make anvil
-```
-
-2. Deploy
-
-This will default to your local node. You need to have it running in another terminal in order for it to deploy.
-
-```
-make deploy
-```
 
 ## Testing
 
@@ -83,7 +66,7 @@ forge coverage --report debug
 
 # Audit Scope Details
 
-- Commit Hash: XX
+- Commit Hash: 22bbbb2c47f3f2b78c1b134590baf41383fd354f
 - In Scope:
 ```
 ./src/

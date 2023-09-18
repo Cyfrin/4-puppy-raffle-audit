@@ -133,7 +133,6 @@ contract PuppyRaffle is ERC721, Ownable {
         totalFees = totalFees + uint64(fee);
 
         uint256 tokenId = totalSupply();
-        _safeMint(winner, tokenId);
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
         uint256 rarity = uint256(keccak256(abi.encodePacked(msg.sender, block.difficulty))) % 100;
@@ -150,6 +149,7 @@ contract PuppyRaffle is ERC721, Ownable {
         previousWinner = winner;
         (bool success,) = winner.call{value: prizePool}("");
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
+        _safeMint(winner, tokenId);
     }
 
     /// @notice this function will withdraw the fees to the feeAddress
