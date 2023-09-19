@@ -13,7 +13,7 @@ header-includes:
         \includegraphics[width=0.5\textwidth]{logo.pdf} 
     \end{figure}
     \vspace*{2cm}
-    {\Huge\bfseries PasswordStore Initial Audit Report\par}
+    {\Huge\bfseries Puppy Raffle Initial Audit Report\par}
     \vspace{1cm}
     {\Large Version 0.1\par}
     \vspace{2cm}
