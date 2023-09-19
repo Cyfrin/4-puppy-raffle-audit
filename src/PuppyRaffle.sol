@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
 
-import {console} from "forge-std/console.sol";
-
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Base64} from "lib/base64/base64.sol";
@@ -73,6 +71,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @notice this is how players enter the raffle
     /// @notice they have to pay the entrance fee * the number of players
+    /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
@@ -154,10 +153,10 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
-        console.log("balance", address(this).balance);
-        console.log("totalFees", uint256(totalFees));
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
-        (bool success,) = feeAddress.call{value: totalFees}("");
+        uint256 feesToWithdraw = totalFees;
+        totalFees = 0;
+        (bool success,) = feeAddress.call{value: feesToWithdraw}("");
         require(success, "PuppyRaffle: Failed to withdraw fees");
     }
 
