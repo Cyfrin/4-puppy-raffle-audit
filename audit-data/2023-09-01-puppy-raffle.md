@@ -56,10 +56,10 @@ Assisting Auditors:
     - [\[H-1\] Reentrancy attack in `PuppyRaffle::refund` allows entrant to drain contract balance](#h-1-reentrancy-attack-in-puppyrafflerefund-allows-entrant-to-drain-contract-balance)
     - [\[H-2\] Weak randomness in `PuppyRaffle::selectWinner` allows anyone to choose winner](#h-2-weak-randomness-in-puppyraffleselectwinner-allows-anyone-to-choose-winner)
     - [\[H-3\] Integer overflow of `PuppyRaffle::totalFees` loses fees](#h-3-integer-overflow-of-puppyraffletotalfees-loses-fees)
-    - [\[H-4\] Malicious winner can forever halt the raffle ](#h-4-malicious-winner-can-forever-halt-the-raffle)
+    - [\[H-4\] Malicious winner can forever halt the raffle](#h-4-malicious-winner-can-forever-halt-the-raffle)
   - [Medium](#medium)
     - [\[M-1\] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector, incrementing gas costs for future entrants](#m-1-looping-through-players-array-to-check-for-duplicates-in-puppyraffleenterraffle-is-a-potential-dos-vector-incrementing-gas-costs-for-future-entrants)
-    - [\[M-2\] Balance Check on `PuppyRaffle::withdrawFees` enables griefers to selfdesctruct a contract to send ETH to the raffle, blocking withdrawls](#m-2-balance-check-on-puppyrafflewithdrawfees-enables-griefers-to-selfdesctruct-a-contract-to-send-eth-to-the-raffle-blocking-withdrawls)
+    - [\[M-2\] Balance check on `PuppyRaffle::withdrawFees` enables griefers to selfdestruct a contract to send ETH to the raffle, blocking withdrawals](#m-2-balance-check-on-puppyrafflewithdrawfees-enables-griefers-to-selfdestruct-a-contract-to-send-eth-to-the-raffle-blocking-withdrawals)
     - [\[M-3\] Unsafe cast of `PuppyRaffle::fee` loses fees](#m-3-unsafe-cast-of-puppyrafflefee-loses-fees)
   - [Informational / Non-Critical](#informational--non-critical)
     - [\[I-1\] Floating pragmas](#i-1-floating-pragmas)
@@ -227,7 +227,7 @@ function testReentrance() public playersEntered {
 
 ### [H-2] Weak randomness in `PuppyRaffle::selectWinner` allows anyone to choose winner
 
-**Description:** Hashing `msg.sender`, `block.timestamp`, `block.difficulty` together creates a predictable final number. A predictable number is not a good random number. Malicious users can manipulate these values to choose the winner of the raffle themselves. 
+**Description:** Hashing `msg.sender`, `block.timestamp`, `block.difficulty` together creates a predictable final number. A predictable number is not a good random number. Malicious users can manipulate these values or know them ahead of time to choose the winner of the raffle themselves. 
 
 **Impact:** Any user can choose the winner of the raffle, winning the money and selecting the "rarest" puppy, essentially making it such that all puppies have the same rarity, since you can choose the puppy. 
 
@@ -235,7 +235,7 @@ function testReentrance() public playersEntered {
 
 There are a few attack vectors here. 
 
-1. Validators can slightly manipulate the `block.timestamp` and `block.difficulty` in an effort to result in their index being the winner. 
+1. Validators can know ahead of time the `block.timestamp` and `block.difficulty` and use that knowledge to predict when / how to participate. See the [solidity blog on prevrando](https://soliditydeveloper.com/prevrandao) here. `block.difficulty` was recently replaced with `prevrandao`.
 2. Users can manipulate the `msg.sender` value to result in their index being the winner.
 
 Using on-chain values as a randomness seed is a [well-known attack vector](https://betterprogramming.pub/how-to-generate-truly-random-numbers-in-solidity-and-blockchain-9ced6472dbdf) in the blockchain space.
