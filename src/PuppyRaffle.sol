@@ -3,6 +3,7 @@ pragma solidity ^0.7.6;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Base64} from "lib/base64/base64.sol";
 
 /// @title PuppyRaffle
@@ -15,6 +16,8 @@ import {Base64} from "lib/base64/base64.sol";
 /// 4. Every X seconds, the raffle will be able to draw a winner and be minted a random puppy
 /// 5. The owner of the protocol will set a feeAddress to take a cut of the `value`, and the rest of the funds will be sent to the winner of the puppy.
 contract PuppyRaffle is ERC721, Ownable {
+    using Address for address payable;
+
     uint256 public immutable entranceFee;
 
     address[] public players;
@@ -80,7 +83,7 @@ contract PuppyRaffle is ERC721, Ownable {
         }
 
         // Check for duplicates
-        for (uint256 i = 0; i < players.length; i++) {
+        for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
             }
@@ -95,8 +98,7 @@ contract PuppyRaffle is ERC721, Ownable {
         require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
         require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
 
-        (bool success,) = msg.sender.call{value: entranceFee}("");
-        require(success, "PuppyRaffle: Failed to refund player");
+        payable(msg.sender).sendValue(entranceFee);
 
         players[playerIndex] = address(0);
         emit RaffleRefunded(playerAddress);
@@ -115,7 +117,7 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will select a winner and mint a puppy
-    /// @notice there must be at least 4 players, and the duration has occured
+    /// @notice there must be at least 4 players, and the duration has occurred
     /// @notice the previous winner is stored in the previousWinner variable
     /// @dev we use a hash of on-chain data to generate the random numbers
     /// @dev we reset the active players array after the winner is selected

@@ -56,6 +56,7 @@ Assisting Auditors:
     - [\[H-1\] Reentrancy attack in `PuppyRaffle::refund` allows entrant to drain contract balance](#h-1-reentrancy-attack-in-puppyrafflerefund-allows-entrant-to-drain-contract-balance)
     - [\[H-2\] Weak randomness in `PuppyRaffle::selectWinner` allows anyone to choose winner](#h-2-weak-randomness-in-puppyraffleselectwinner-allows-anyone-to-choose-winner)
     - [\[H-3\] Integer overflow of `PuppyRaffle::totalFees` loses fees](#h-3-integer-overflow-of-puppyraffletotalfees-loses-fees)
+    - [\[H-4\] Malicious winner can forever halt the raffle ](#h-4-malicious-winner-can-forever-halt-the-raffle)
   - [Medium](#medium)
     - [\[M-1\] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector, incrementing gas costs for future entrants](#m-1-looping-through-players-array-to-check-for-duplicates-in-puppyraffleenterraffle-is-a-potential-dos-vector-incrementing-gas-costs-for-future-entrants)
     - [\[M-2\] Balance Check on `PuppyRaffle::withdrawFees` enables griefers to selfdesctruct a contract to send ETH to the raffle, blocking withdrawls](#m-2-balance-check-on-puppyrafflewithdrawfees-enables-griefers-to-selfdesctruct-a-contract-to-send-eth-to-the-raffle-blocking-withdrawls)
@@ -67,6 +68,8 @@ Assisting Auditors:
     - [\[I-4\] Zero address validation](#i-4-zero-address-validation)
     - [\[I-5\] \_isActivePlayer is never used and should be removed](#i-5-_isactiveplayer-is-never-used-and-should-be-removed)
     - [\[I-6\] Unchanged variables should be constant or immutable](#i-6-unchanged-variables-should-be-constant-or-immutable)
+    - [\[I-7\] Potentially erroneous active player index](#i-7-potentially-erroneous-active-player-index)
+    - [\[I-8\] Zero address may be erroneously considered an active player](#i-8-zero-address-may-be-erroneously-considered-an-active-player)
   - [Gas (Optional)](#gas-optional)
 </details>
 </br>
@@ -118,10 +121,10 @@ Puppy Rafle is a protocol dedicated to raffling off puppy NFTs with variying rar
 
 | Severity | Number of issues found |
 | -------- | ---------------------- |
-| High     | 3                      |
+| High     | 4                      |
 | Medium   | 3                      |
 | Low      | 0                      |
-| Info     | 6                      |
+| Info     | 8                      |
 | Total    | 0                      |
 
 # Findings
@@ -140,8 +143,7 @@ function refund(uint256 playerIndex) public {
     require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
     require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
 
-@>  (bool success,) = msg.sender.call{value: entranceFee}("");
-    require(success, "PuppyRaffle: Failed to refund player");
+@>  payable(msg.sender).sendValue(entranceFee);
 
 @>  players[playerIndex] = address(0);
     emit RaffleRefunded(playerAddress);
@@ -227,7 +229,7 @@ function testReentrance() public playersEntered {
 
 **Description:** Hashing `msg.sender`, `block.timestamp`, `block.difficulty` together creates a predictable final number. A predictable number is not a good random number. Malicious users can manipulate these values to choose the winner of the raffle themselves. 
 
-**Impact:** Any user can choose the winner of the raffle, winning the money and selecting the "rarest" puppy, essentailly making it such that all puppies have the same rareity, since you can choose the puppy. 
+**Impact:** Any user can choose the winner of the raffle, winning the money and selecting the "rarest" puppy, essentially making it such that all puppies have the same rarity, since you can choose the puppy. 
 
 **Proof of Concept:** 
 
@@ -242,7 +244,7 @@ Using on-chain values as a randomness seed is a [well-known attack vector](https
 
 ### [H-3] Integer overflow of `PuppyRaffle::totalFees` loses fees
 
-**Description:** In solidity versions prior to `0.8.0`, integers were subject to integer overflows. 
+**Description:** In Solidity versions prior to `0.8.0`, integers were subject to integer overflows. 
 
 ```javascript
 uint64 myVar = type(uint64).max; 
@@ -269,7 +271,7 @@ totalFees = 153255926290448384;
 require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
 ```
 
-We could `selfdestruct` to send ETH to this contract in order for the values to match and withdraw the fees, but this is clearly not what the protocol is intended to do. 
+Although you could use `selfdestruct` to send ETH to this contract in order for the values to match and withdraw the fees, this is clearly not what the protocol is intended to do. 
 
 <details>
 <summary>Proof Of Code</summary>
@@ -313,14 +315,14 @@ function testTotalFeesOverflow() public playersEntered {
 
 **Recommended Mitigation:** There are a few recommended mitigations here.
 
-1. Use a newer version of solidity that does not have integer overflows.
+1. Use a newer version of Solidity that does not allow integer overflows by default.
 
 ```diff 
 - pragma solidity ^0.7.6;
 + pragma solidity ^0.8.18;
 ```
 
-Alternatively, if you want to use an older version of solidity, you can use a library like Openzeppelin's `SafeMath` to prevent integer overflows. 
+Alternatively, if you want to use an older version of Solidity, you can use a library like OpenZeppelin's `SafeMath` to prevent integer overflows. 
 
 2. Use a `uint256` instead of a `uint64` for `totalFees`. 
 
@@ -335,16 +337,79 @@ Alternatively, if you want to use an older version of solidity, you can use a li
 - require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
 ```
 
-We additionally want to bring your attention to another attack vector as a result of this line in a future finding. 
+We additionally want to bring your attention to another attack vector as a result of this line in a future finding.
+
+### [H-4] Malicious winner can forever halt the raffle
+
+**Description:** Once the winner is chosen, the `selectWinner` function sends the prize to the the corresponding address with an external call to the winner account.
+
+```javascript
+(bool success,) = winner.call{value: prizePool}("");
+require(success, "PuppyRaffle: Failed to send prize pool to winner");
+```
+
+If the `winner` account were a smart contract that did not implement a payable `fallback` or `receive` function, or these functions were included but reverted, the external call above would fail, and execution of the `selectWinner` function would halt. Therefore, the prize would never be distributed and the raffle would never be able to start a new round.
+
+There's another attack vector that can be used to halt the raffle, leveraging the fact that the `selectWinner` function mints an NFT to the winner using the `_safeMint` function. This function, inherited from the `ERC721` contract, attempts to call the `onERC721Received` hook on the receiver if it is a smart contract. Reverting when the contract does not implement such function.
+
+Therefore, an attacker can register a smart contract in the raffle that does not implement the `onERC721Received` hook expected. This will prevent minting the NFT and will revert the call to `selectWinner`.
+
+**Impact:** In either case, because it'd be impossible to distribute the prize and start a new round, the raffle would be halted forever.
+
+**Proof of Concept:** 
+
+<details>
+<summary>Proof Of Code</summary>
+Place the following test into `PuppyRaffleTest.t.sol`.
+
+```javascript
+function testSelectWinnerDoS() public {
+    vm.warp(block.timestamp + duration + 1);
+    vm.roll(block.number + 1);
+
+    address[] memory players = new address[](4);
+    players[0] = address(new AttackerContract());
+    players[1] = address(new AttackerContract());
+    players[2] = address(new AttackerContract());
+    players[3] = address(new AttackerContract());
+    puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+
+    vm.expectRevert();
+    puppyRaffle.selectWinner();
+}
+```
+
+For example, the `AttackerContract` can be this:
+
+```javascript
+contract AttackerContract {
+    // Implements a `receive` function that always reverts
+    receive() external payable {
+        revert();
+    }
+}
+```
+
+Or this:
+
+```javascript
+contract AttackerContract {
+    // Implements a `receive` function to receive prize, but does not implement `onERC721Received` hook to receive the NFT.
+    receive() external payable {}
+}
+```
+</details>
+
+**Recommended Mitigation:** Favor pull-payments over push-payments. This means modifying the `selectWinner` function so that the winner account has to claim the prize by calling a function, instead of having the contract automatically send the funds during execution of `selectWinner`.
 
 ## Medium
 
 ### [M-1] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector, incrementing gas costs for future entrants
 
-**Description:** The `PuppyRaffle::enterRaffle` function has a duplicate checking mechanism that loops through the `players` array to check for duplicates. However, the longer the `PuppyRaffle:players` array is, the more checks a new player will have to make. This means that the gas costs for players who enter right when the raffle starts will be dramatically lower than those who enter later. Every additional play in the `players` array, is an additional check the loop will have to make. 
+**Description:** The `PuppyRaffle::enterRaffle` function loops through the `players` array to check for duplicates. However, the longer the `PuppyRaffle:players` array is, the more checks a new player will have to make. This means that the gas costs for players who enter right when the raffle starts will be dramatically lower than those who enter later. Every additional address in the `players` array, is an additional check the loop will have to make. 
 
 **Note to students: This next line would likely be it's own finding itself. However, we haven't taught you about MEV yet, so we are going to ignore it.**
-Additionally, this increaced gas cost creates front-running opportunities where malicious users can front-run another raffle entrant's transaction, increase it's costs, so their enter transaction fails. 
+Additionally, this increased gas cost creates front-running opportunities where malicious users can front-run another raffle entrant's transaction, increasing its costs, so their enter transaction fails. 
 
 **Impact:** The impact is two-fold.
 
@@ -354,8 +419,8 @@ Additionally, this increaced gas cost creates front-running opportunities where 
 **Proof of Concept:** 
 
 If we have 2 sets of 100 players enter, the gas costs will be as such:
-- 1st 100 players: 6251420
-- 2nd 100 players: 18066229
+- 1st 100 players: 6252039
+- 2nd 100 players: 18067741
 
 This is more than 3x as expensive for the second set of 100 players! 
 
@@ -363,7 +428,7 @@ This is due to the for loop in the `PuppyRaffle::enterRaffle` function.
 
 ```javascript
         // Check for duplicates
-@>      for (uint256 i = 0; i < players.length; i++) {
+@>      for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
             }
@@ -404,9 +469,9 @@ function testReadDuplicateGasCosts() public {
 
         assert(gasUsedFirst < gasUsedSecond);
         // Logs:
-        //     Gas cost of the 1st 100 players: 6251420
-        //     Gas cost of the 2nd 100 players: 18066229
-    }
+        //     Gas cost of the 1st 100 players: 6252039
+        //     Gas cost of the 2nd 100 players: 18067741
+}
 ```
 </details>
 
@@ -448,9 +513,11 @@ function testReadDuplicateGasCosts() public {
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
 ```
 
-### [M-2] Balance Check on `PuppyRaffle::withdrawFees` enables griefers to selfdesctruct a contract to send ETH to the raffle, blocking withdrawls
+Alternatively, you could use [OpenZeppelin's `EnumerableSet` library](https://docs.openzeppelin.com/contracts/4.x/api/utils#EnumerableSet).
 
-**Description:** The `PuppyRaffle::withdrawFees` function checks the `totalFees` equals the ETH balance of the contract (`address(this).balance`). Since this contract doens't have a `payable` fallback or recieve function, you'd think this wouldn't be possible, but a user could `selfdesctruct` a contract with ETH in it and force funds to the `PuppyRaffle` contract, breaking this check. 
+### [M-2] Balance check on `PuppyRaffle::withdrawFees` enables griefers to selfdestruct a contract to send ETH to the raffle, blocking withdrawals
+
+**Description:** The `PuppyRaffle::withdrawFees` function checks the `totalFees` equals the ETH balance of the contract (`address(this).balance`). Since this contract doesn't have a `payable` fallback or `receive` function, you'd think this wouldn't be possible, but a user could `selfdesctruct` a contract with ETH in it and force funds to the `PuppyRaffle` contract, breaking this check. 
 
 ```javascript
     function withdrawFees() external {
@@ -462,7 +529,7 @@ function testReadDuplicateGasCosts() public {
     }
 ```
 
-**Impact:** This would prevent the `feeAddress` from withdrawing fees. A malicious user could see a `withdrawFee` transaction in the mempool, front-run it, and block the withdrawl by sending fees. 
+**Impact:** This would prevent the `feeAddress` from withdrawing fees. A malicious user could see a `withdrawFee` transaction in the mempool, front-run it, and block the withdrawal by sending fees. 
 
 **Proof of Concept:**
 
@@ -635,8 +702,20 @@ PuppyRaffle.rareImageUri (src/PuppyRaffle.sol#40) should be constant
 Immutable Instances:
 
 ```
-PuppyRaffle.raffleDuration (src/PuppyRaffle.sol#21) should be immutable 
+PuppyRaffle.raffleDuration (src/PuppyRaffle.sol#21) should be immutable
 ```
+
+### [I-7] Potentially erroneous active player index
+
+**Description:** The `getActivePlayerIndex` function is intended to return zero when the given address is not active. However, it could also return zero for an active address stored in the first slot of the `players` array. This may cause confusions for users querying the function to obtain the index of an active player.
+
+**Recommended Mitigation:** Return 2**256-1 (or any other sufficiently high number) to signal that the given player is inactive, so as to avoid collision with indices of active players.
+
+### [I-8] Zero address may be erroneously considered an active player
+
+**Description:** The `refund` function removes active players from the `players` array by setting the corresponding slots to zero. This is confirmed by its documentation, stating that "This function will allow there to be blank spots in the array". However, this is not taken into account by the `getActivePlayerIndex` function. If someone calls `getActivePlayerIndex` passing the zero address after there's been a refund, the function will consider the zero address an active player, and return its index in the `players` array.
+
+**Recommended Mitigation:** Skip zero addresses when iterating the `players` array in the `getActivePlayerIndex`. Do note that this change would mean that the zero address can _never_ be an active player. Therefore, it would be best if you also prevented the zero address from being registered as a valid player in the `enterRaffle` function.
 
 ## Gas (Optional)
 
