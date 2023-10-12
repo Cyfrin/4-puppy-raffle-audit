@@ -4,26 +4,6 @@
 </p>
 <br/>
 
-# Contest Details
-
-## Contest Details
-
-### Prize Pool
-
-- 2x XP/Finding!
-- High - 200xp
-- Medium - 40xp
-- Low - 4xp
-- Gas - 2xp
-
-- Starts: 00:00 UTC Wednesday, Oct 25 2023
-- Ends: 00:00 UTC Wednesday, Nov 01 2023
-
-## Stats
-
-- nSLOC: 143
-- Complexity Score: 111
-
 # Puppy Raffle
 
 This project is to enter a raffle to win a cute dog NFT. The protocol should do the following:
