@@ -13,10 +13,6 @@ This project is to enter a raffle to win a cute dog NFT. The protocol should do 
 4. Every X seconds, the raffle will be able to draw a winner and be minted a random puppy
 5. The owner of the protocol will set a feeAddress to take a cut of the `value`, and the rest of the funds will be sent to the winner of the puppy.
 
-- [Contest Details](#contest-details)
-  - [Contest Details](#contest-details-1)
-    - [Prize Pool](#prize-pool)
-  - [Stats](#stats)
 - [Puppy Raffle](#puppy-raffle)
 - [Getting Started](#getting-started)
   - [Requirements](#requirements)
@@ -75,7 +71,7 @@ forge coverage --report debug
 
 # Audit Scope Details
 
-- Commit Hash: 22bbbb2c47f3f2b78c1b134590baf41383fd354f
+- Commit Hash: 0804be9b0fd17db9e2953e27e9de46585be870cf
 - In Scope:
 
 ```
