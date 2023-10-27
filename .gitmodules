@@ -7,3 +7,6 @@
 [submodule "lib/base64"]
 	path = lib/base64
 	url = https://github.com/Brechtpd/base64
+[submodule "exploits/lib/forge-std"]
+	path = exploits/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
