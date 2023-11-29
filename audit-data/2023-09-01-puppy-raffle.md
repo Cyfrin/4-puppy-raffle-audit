@@ -61,6 +61,7 @@ Assisting Auditors:
     - [\[M-1\] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector, incrementing gas costs for future entrants](#m-1-looping-through-players-array-to-check-for-duplicates-in-puppyraffleenterraffle-is-a-potential-dos-vector-incrementing-gas-costs-for-future-entrants)
     - [\[M-2\] Balance check on `PuppyRaffle::withdrawFees` enables griefers to selfdestruct a contract to send ETH to the raffle, blocking withdrawals](#m-2-balance-check-on-puppyrafflewithdrawfees-enables-griefers-to-selfdestruct-a-contract-to-send-eth-to-the-raffle-blocking-withdrawals)
     - [\[M-3\] Unsafe cast of `PuppyRaffle::fee` loses fees](#m-3-unsafe-cast-of-puppyrafflefee-loses-fees)
+    - [\[M-4\] Smart Contract wallet raffle winners without a `receive` or a `fallback` will block the start of a new contest](#m-4-smart-contract-wallet-raffle-winners-without-a-receive-or-a-fallback-will-block-the-start-of-a-new-contest)
   - [Informational / Non-Critical](#informational--non-critical)
     - [\[I-1\] Floating pragmas](#i-1-floating-pragmas)
     - [\[I-2\] Magic Numbers](#i-2-magic-numbers)
@@ -340,6 +341,7 @@ Alternatively, if you want to use an older version of Solidity, you can use a li
 We additionally want to bring your attention to another attack vector as a result of this line in a future finding.
 
 ### [H-4] Malicious winner can forever halt the raffle
+<!-- TODO: This is not accurate, but there are some issues. This is likely a low. Users who don't have a fallback can't get their money and the TX will fail. -->
 
 **Description:** Once the winner is chosen, the `selectWinner` function sends the prize to the the corresponding address with an external call to the winner account.
 
@@ -613,6 +615,26 @@ But the potential gas saved isn't worth it if we have to recast and this bug exi
 +       totalFees = totalFees + fee;
 ```
 
+### [M-4] Smart Contract wallet raffle winners without a `receive` or a `fallback` will block the start of a new contest
+
+**Description:** The `PuppyRaffle::selectWinner` function is responsible for resetting the lottery. However, if the winner is a smart contract wallet that rejects payment, the lottery would not be able to restart. 
+
+Non-smart contract wallet users could reenter, but it might cost them a lot of gas due to the duplicate check.
+
+**Impact:** The `PuppyRaffle::selectWinner` function could revert many times, and make it very difficult to reset the lottery, preventing a new one from starting. 
+
+Also, true winners would not be able to get paid out, and someone else would win their money!
+
+**Proof of Concept:** 
+1. 10 smart contract wallets enter the lottery without a fallback or receive function.
+2. The lottery ends
+3. The `selectWinner` function wouldn't work, even though the lottery is over!
+
+**Recommended Mitigation:** There are a few options to mitigate this issue.
+
+1. Do not allow smart contract wallet entrants (not recommended)
+2. Create a mapping of addresses -> payout so winners can pull their funds out themselves, putting the owness on the winner to claim their prize. (Recommended)
+
 ## Informational / Non-Critical 
 
 ### [I-1] Floating pragmas 
@@ -719,3 +741,13 @@ PuppyRaffle.raffleDuration (src/PuppyRaffle.sol#21) should be immutable
 
 ## Gas (Optional)
 
+// TODO
+
+- `getActivePlayerIndex` returning 0. Is it the player at index 0? Or is it invalid. 
+
+- MEV with the refund function. 
+- MEV with withdrawfees
+
+- randomness for rarity issue
+
+- reentrancy puppy raffle before safemint (it looks ok actually, potentially informational)
