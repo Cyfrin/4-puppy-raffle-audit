@@ -16,23 +16,14 @@ contract PuppyRaffleTest is Test {
     uint256 duration = 1 days;
 
     function setUp() public {
-        puppyRaffle = new PuppyRaffle(
-            entranceFee,
-            feeAddress,
-            duration
-        );
+        puppyRaffle = new PuppyRaffle(entranceFee, feeAddress, duration);
     }
 
     //////////////////////
     /// EnterRaffle    ///
     /////////////////////
 
-    function testCanEnterRaffle() public {
-        address[] memory players = new address[](1);
-        players[0] = playerOne;
-        puppyRaffle.enterRaffle{value: entranceFee}(players);
-        assertEq(puppyRaffle.players(0), playerOne);
-    }
+    
 
     function testCantEnterWithoutPaying() public {
         address[] memory players = new address[](1);
@@ -70,7 +61,7 @@ contract PuppyRaffleTest is Test {
         address[] memory players = new address[](3);
         players[0] = playerOne;
         players[1] = playerTwo;
-        players[2] = playerOne;
+        players[2] = playerThree;
         vm.expectRevert("PuppyRaffle: Duplicate player");
         puppyRaffle.enterRaffle{value: entranceFee * 3}(players);
     }
@@ -170,7 +161,7 @@ contract PuppyRaffleTest is Test {
         vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        uint256 expectedPayout = ((entranceFee * 4) * 80 / 100);
+        uint256 expectedPayout = (((entranceFee * 4) * 80) / 100);
 
         puppyRaffle.selectWinner();
         assertEq(address(playerFour).balance, balanceBefore + expectedPayout);
@@ -188,8 +179,8 @@ contract PuppyRaffleTest is Test {
         vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        string memory expectedTokenUri =
-            "data:application/json;base64,eyJuYW1lIjoiUHVwcHkgUmFmZmxlIiwgImRlc2NyaXB0aW9uIjoiQW4gYWRvcmFibGUgcHVwcHkhIiwgImF0dHJpYnV0ZXMiOiBbeyJ0cmFpdF90eXBlIjogInJhcml0eSIsICJ2YWx1ZSI6IGNvbW1vbn1dLCAiaW1hZ2UiOiJpcGZzOi8vUW1Tc1lSeDNMcERBYjFHWlFtN3paMUF1SFpqZmJQa0Q2SjdzOXI0MXh1MW1mOCJ9";
+        string
+            memory expectedTokenUri = "data:application/json;base64,eyJuYW1lIjoiUHVwcHkgUmFmZmxlIiwgImRlc2NyaXB0aW9uIjoiQW4gYWRvcmFibGUgcHVwcHkhIiwgImF0dHJpYnV0ZXMiOiBbeyJ0cmFpdF90eXBlIjogInJhcml0eSIsICJ2YWx1ZSI6IGNvbW1vbn1dLCAiaW1hZ2UiOiJpcGZzOi8vUW1Tc1lSeDNMcERBYjFHWlFtN3paMUF1SFpqZmJQa0Q2SjdzOXI0MXh1MW1mOCJ9";
 
         puppyRaffle.selectWinner();
         assertEq(puppyRaffle.tokenURI(0), expectedTokenUri);
@@ -212,5 +203,45 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.selectWinner();
         puppyRaffle.withdrawFees();
         assertEq(address(feeAddress).balance, expectedPrizeAmount);
+    }
+
+    //////////////////////
+    /// DOS ATTACK    ///
+    /////////////////////
+
+    function test_DOSAttack() public {
+        vm.txGasPrice(1);
+        uint initial = gasleft();
+
+        uint playerNumber = 100;
+
+        //initialize an array for first 100 players
+        address[] memory DoS_array = new address[](playerNumber);
+        for (uint160 i = 0; i < playerNumber; i++) {
+            DoS_array[i] = address(i);
+        }
+        puppyRaffle.enterRaffle{value: entranceFee * playerNumber}(DoS_array);
+        //how much gases consumed?
+        uint256 gases = initial - gasleft();
+        console.log(gases);
+
+        //the gas is astronomically high for second 100 players
+        
+
+        address[] memory DoS_arraySecond = new address[](playerNumber);
+        for (uint160 i = 0; i < playerNumber; i++) {
+            DoS_array[i] = address(i + playerNumber);
+        }
+        puppyRaffle.enterRaffle{value: entranceFee * playerNumber}(DoS_array);
+        //how much gases consumed?
+        uint256 gasesSecond = initial - gasleft();
+        console.log(gasesSecond);
+        assert(gases < gasesSecond);
+    }
+    function testCanEnterRaffle() public {
+        address[] memory players = new address[](1);
+        players[0] = playerOne;
+        puppyRaffle.enterRaffle{value: entranceFee}(players);
+        assertEq(puppyRaffle.players(0), playerOne);
     }
 }
