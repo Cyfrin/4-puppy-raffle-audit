@@ -22,9 +22,6 @@ contract PuppyRaffleTest is Test {
     //////////////////////
     /// EnterRaffle    ///
     /////////////////////
-
-    
-
     function testCantEnterWithoutPaying() public {
         address[] memory players = new address[](1);
         players[0] = playerOne;
@@ -61,7 +58,7 @@ contract PuppyRaffleTest is Test {
         address[] memory players = new address[](3);
         players[0] = playerOne;
         players[1] = playerTwo;
-        players[2] = playerThree;
+        players[2] = playerTwo;
         vm.expectRevert("PuppyRaffle: Duplicate player");
         puppyRaffle.enterRaffle{value: entranceFee * 3}(players);
     }
@@ -244,4 +241,7 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.enterRaffle{value: entranceFee}(players);
         assertEq(puppyRaffle.players(0), playerOne);
     }
+    
+
+
 }

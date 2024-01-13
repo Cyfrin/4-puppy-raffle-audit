@@ -60,6 +60,11 @@ contract PuppyRaffle is ERC721, Ownable {
     event RaffleRefunded(address player);
     event FeeAddressChanged(address newFeeAddress);
 
+    ////////////////////////////
+
+    //mapping(address => uint256) public addressToRaffleId;
+    // uint256 public raffleId = 0;
+
     /// @param _entranceFee the cost in wei to enter the raffle
     /// @param _feeAddress the address to send the fees to
     /// @param _raffleDuration the duration in seconds of the raffle
@@ -87,35 +92,68 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
+        //     require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
+        //     for (uint256 i = 0; i < newPlayers.length; i++) {
+        //         players.push(newPlayers[i]);
+        //      addressToRaffleId[newPlayers[i]] = raffleId;
+        //     }
+
+        //    // Check for duplicates
+        //   // Check for duplicates only from the new players
+        //  for (uint256 i = 0; i < newPlayers.length; i++) {
+        //      require(addressToRaffleId[newPlayers[i]] != raffleId, "PuppyRaffle: Duplicate player");
+        //    }
+
+        //     emit RaffleEnter(newPlayers);
         require(
             msg.value == entranceFee * newPlayers.length,
             "PuppyRaffle: Must send enough to enter raffle"
         );
 
         for (uint256 i = 0; i < newPlayers.length; i++) {
-            if(!isAddressEntered[newPlayers[i]]){
+            if (!isAddressEntered[newPlayers[i]]) {
                 players.push(newPlayers[i]);
                 isAddressEntered[newPlayers[i]] = true;
-
+            } else if (isAddressEntered[newPlayers[i]]) {
+                revert("PuppyRaffle: Duplicate player");
             }
-            
-            
-            //addressToRaffleId[newPlayers[i]] = raffleId;
-            
         }
-        // Check for duplicates only from the new players
-        for (uint256 i = 0; i < newPlayers.length; i++) {
-            require(
-                addressToRaffleId[newPlayers[i]] != raffleId,
-                "PuppyRaffle: Duplicate player"
-            );
-        }
-        // Check for duplicates
+
+        // // Check for duplicates
         // for (uint256 i = 0; i < players.length - 1; i++) {
         //     for (uint256 j = i + 1; j < players.length; j++) {
         //         require(players[i] != players[j], "PuppyRaffle: Duplicate player");
         //     }
         // }
+        // emit RaffleEnter(newPlayers);
+        // require(
+        //     msg.value == entranceFee * newPlayers.length,
+        //     "PuppyRaffle: Must send enough to enter raffle"
+        // );
+
+        // for (uint256 i = 0; i < newPlayers.length; i++) {
+        //     if(!isAddressEntered[newPlayers[i]]){
+        //         players.push(newPlayers[i]);
+        //         isAddressEntered[newPlayers[i]] = true;
+
+        //     }
+
+        //     //addressToRaffleId[newPlayers[i]] = raffleId;
+
+        // }
+        // // Check for duplicates only from the new players
+        // for (uint256 i = 0; i < newPlayers.length; i++) {
+        //     require(
+        //         addressToRaffleId[newPlayers[i]] != raffleId,
+        //         "PuppyRaffle: Duplicate player"
+        //     );
+        // }
+        // // Check for duplicates
+        // // for (uint256 i = 0; i < players.length - 1; i++) {
+        // //     for (uint256 j = i + 1; j < players.length; j++) {
+        // //         require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+        // //     }
+        // // }
         emit RaffleEnter(newPlayers);
     }
 
@@ -124,6 +162,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param playerIndex the index of the player to refund. You can find it externally by calling `getActivePlayerIndex`
     /// @dev This function will allow there to be blank spots in the array
     function refund(uint256 playerIndex) public {
+        // @audit MEV?
         address playerAddress = players[playerIndex];
         require(
             playerAddress == msg.sender,
@@ -133,6 +172,8 @@ contract PuppyRaffle is ERC721, Ownable {
             playerAddress != address(0),
             "PuppyRaffle: Player already refunded, or is not active"
         );
+
+        // @audit non-CEI flow- Reentrancy attack?
 
         payable(msg.sender).sendValue(entranceFee);
 
@@ -153,6 +194,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 return i;
             }
         }
+        //@audit what if the player is at index 0?
         return 0;
     }
 

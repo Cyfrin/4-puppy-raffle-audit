@@ -81,6 +81,17 @@ enter the raffle with multiple addresses to bypass the "duplicate check." So, wh
 -            }
 -        }
 
-+ 
++    mapping(address => bool) public isAddressEntered;
+
+
++  for (uint256 i = 0; i < newPlayers.length; i++) {
++      if (!isAddressEntered[newPlayers[i]]) {
++               players.push(newPlayers[i]);
++               isAddressEntered[newPlayers[i]] = true;
++           } else if (isAddressEntered[newPlayers[i]]) {
++               revert("PuppyRaffle: Duplicate player");
++           }
++ }
 ```
+3. Lastly, you can implement [Openzepplin Enumerable library](https://docs.openzeppelin.com/contracts/4.x/api/utils#EnumerableSet)
 
