@@ -35,6 +35,8 @@ contract PuppyRaffle is ERC721, Ownable {
     mapping(uint256 => uint256) public tokenIdToRarity;
     mapping(uint256 => string) public rarityToUri;
     mapping(uint256 => string) public rarityToName;
+
+    //mapping to check for duplicate in enterRaffle function
     mapping(address => bool) public isAddressEntered;
 
     // Stats for the common puppy (pug)
@@ -205,11 +207,15 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
+        //@audit  does it adhere to the CEI flow
+        //@audit how do miners influence block.timestamp, now and blockhac
         require(
             block.timestamp >= raffleStartTime + raffleDuration,
             "PuppyRaffle: Raffle not over"
         );
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
+
+        // @audit weak randomness
         uint256 winnerIndex = uint256(
             keccak256(
                 abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
@@ -217,21 +223,33 @@ contract PuppyRaffle is ERC721, Ownable {
         ) % players.length;
         address winner = players[winnerIndex];
         uint256 totalAmountCollected = players.length * entranceFee;
+
+        //@audit arithmetic overflow- unchecked maths?
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
-        totalFees = totalFees + uint64(fee);
 
+        //@audit typecast error?
+        totalFees = totalFees + uint64(fee);
+        
+        //@audit where is this coming from?
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
+        //@audit weak randomness?
         uint256 rarity = uint256(
             keccak256(abi.encodePacked(msg.sender, block.difficulty))
         ) % 100;
+        
+        //0-70
         if (rarity <= COMMON_RARITY) {
             tokenIdToRarity[tokenId] = COMMON_RARITY;
-        } else if (rarity <= COMMON_RARITY + RARE_RARITY) {
+        } 
+        //71-95
+        else if (rarity <= COMMON_RARITY + RARE_RARITY) {
             tokenIdToRarity[tokenId] = RARE_RARITY;
-        } else {
+        } 
+        //96 - 100
+        else {
             tokenIdToRarity[tokenId] = LEGENDARY_RARITY;
         }
 
