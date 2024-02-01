@@ -113,6 +113,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 return i;
             }
         }
+        // q: What if player is actually at 0 index position? 
         return 0;
     }
 
