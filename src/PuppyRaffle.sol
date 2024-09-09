@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.7.6;
+pragma solidity ^0.7.6; //q is solc version static or incremental ?
+
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -20,7 +21,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
     uint256 public immutable entranceFee;
 
-    address[] public players;
+    address[] public players; // q are all time players or round's players?
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
     address public previousWinner;
@@ -60,6 +61,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param _entranceFee the cost in wei to enter the raffle
     /// @param _feeAddress the address to send the fees to
     /// @param _raffleDuration the duration in seconds of the raffle
+
     constructor(
         uint256 _entranceFee,
         address _feeAddress,
@@ -83,16 +85,21 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice they have to pay the entrance fee * the number of players
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
+
+    // @audit: Duplicate
     function enterRaffle(address[] memory newPlayers) public payable {
         require(
             msg.value == entranceFee * newPlayers.length,
             "PuppyRaffle: Must send enough to enter raffle"
         );
+        //r  reduce: iterate over newPlayers and compare againts players
+
         for (uint256 i = 0; i < newPlayers.length; i++) {
             players.push(newPlayers[i]);
         }
 
         // Check for duplicates
+        //@audit: check for duplicates not enough players covered
         for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(
@@ -106,6 +113,8 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @param playerIndex the index of the player to refund. You can find it externally by calling `getActivePlayerIndex`
     /// @dev This function will allow there to be blank spots in the array
+
+    // @audit: Reentrancy: winner gets paid before getting removed
     function refund(uint256 playerIndex) public {
         address playerAddress = players[playerIndex];
         require(
@@ -116,7 +125,7 @@ contract PuppyRaffle is ERC721, Ownable {
             playerAddress != address(0),
             "PuppyRaffle: Player already refunded, or is not active"
         );
-
+        // r remove player first otherwise: reentrancy
         payable(msg.sender).sendValue(entranceFee);
 
         players[playerIndex] = address(0);
@@ -143,12 +152,16 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we use a hash of on-chain data to generate the random numbers
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
+
+    // @audit: prizepool and fee calculation locks drained wei
+    // @audit: Weak random numbers generated
     function selectWinner() external {
         require(
             block.timestamp >= raffleStartTime + raffleDuration,
             "PuppyRaffle: Raffle not over"
         );
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
+        // r weak random number, can be exploited
         uint256 winnerIndex = uint256(
             keccak256(
                 abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
@@ -183,6 +196,7 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will withdraw the fees to the feeAddress
+    // @audit: Locked wei not withdrawn
     function withdrawFees() external {
         require(
             address(this).balance == uint256(totalFees),
