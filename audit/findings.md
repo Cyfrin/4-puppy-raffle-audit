@@ -1,3 +1,41 @@
+### [H-#] Reentrancy at `PuppyRaffle::refund` allows a malicious contract to `re-refund` a user, eventually draining `Raffle` funds completely.
+
+**Description:** Refund does not distinguishes between EOA or Smart Contract Addreses, in case of refund is called by malicious SmartContracts. Refund does remove `caller` before interaction, allowing `reentracy` by calling `contracts::fallback | receive` functions then calling `refund` again until no funds are left.
+
+**Impact:** Reentracy will absolutely drain protocol's entire Funds.
+**Proof of Concept**
+
+```javascript
+ function testAuditRefundReentrancy() public playersEntered {
+        AtackerContract atacker = new AtackerContract(puppyRaffle);
+        address[] memory players = new address[](1);
+        players[0] = address(atacker);
+        puppyRaffle.enterRaffle{value: entranceFee}(players);
+
+        uint256 index = puppyRaffle.getActivePlayerIndex(address(atacker));
+
+        uint256 initBalance = address(puppyRaffle).balance;
+        vm.prank(address(atacker));
+        puppyRaffle.refund(index);
+
+        uint256 endingBalance = address(puppyRaffle).balance;
+        assertGt(initBalance, entranceFee);
+        assertEq(endingBalance, 0);
+    }
+
+```
+
+**Recommened Mitigation**
+
+- Delete player before sending entranceFee at `PuppyRaffle:refund`:
+
+```diff
++       players[playerIndex] = address(0);
+        payable(msg.sender).sendValue(entranceFee);
+-       players[playerIndex] = address(0);
+        emit RaffleRefunded(playerAddress);
+```
+
 ### [H-1] Duplicate players verification generates a DOS for larger list of players, causing `PuppyRaffle::enterRaffle` to be expensive, making it unavailable for incomming players
 
 **Description:** duplicate players verification, is done by comparing a new player againts players through a nested loop, which is a heavy computation for larger arrays. the firsts transaction will be cheaper in comparison agains later transactions.

