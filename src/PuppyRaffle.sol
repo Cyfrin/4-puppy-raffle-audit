@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.7.6;
-//q is solc version static or incremental ?
 //@audit old pragama version used, why?
 //@audit dynamic pragma version: use newest and seacure versions
 

@@ -16,11 +16,7 @@ contract PuppyRaffleTest is Test {
     uint256 duration = 1 days;
 
     function setUp() public {
-        puppyRaffle = new PuppyRaffle(
-            entranceFee,
-            feeAddress,
-            duration
-        );
+        puppyRaffle = new PuppyRaffle(entranceFee, feeAddress, duration);
     }
 
     //////////////////////
@@ -170,7 +166,7 @@ contract PuppyRaffleTest is Test {
         vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        uint256 expectedPayout = ((entranceFee * 4) * 80 / 100);
+        uint256 expectedPayout = (((entranceFee * 4) * 80) / 100);
 
         puppyRaffle.selectWinner();
         assertEq(address(playerFour).balance, balanceBefore + expectedPayout);
@@ -188,8 +184,8 @@ contract PuppyRaffleTest is Test {
         vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        string memory expectedTokenUri =
-            "data:application/json;base64,eyJuYW1lIjoiUHVwcHkgUmFmZmxlIiwgImRlc2NyaXB0aW9uIjoiQW4gYWRvcmFibGUgcHVwcHkhIiwgImF0dHJpYnV0ZXMiOiBbeyJ0cmFpdF90eXBlIjogInJhcml0eSIsICJ2YWx1ZSI6IGNvbW1vbn1dLCAiaW1hZ2UiOiJpcGZzOi8vUW1Tc1lSeDNMcERBYjFHWlFtN3paMUF1SFpqZmJQa0Q2SjdzOXI0MXh1MW1mOCJ9";
+        string
+            memory expectedTokenUri = "data:application/json;base64,eyJuYW1lIjoiUHVwcHkgUmFmZmxlIiwgImRlc2NyaXB0aW9uIjoiQW4gYWRvcmFibGUgcHVwcHkhIiwgImF0dHJpYnV0ZXMiOiBbeyJ0cmFpdF90eXBlIjogInJhcml0eSIsICJ2YWx1ZSI6IGNvbW1vbn1dLCAiaW1hZ2UiOiJpcGZzOi8vUW1Tc1lSeDNMcERBYjFHWlFtN3paMUF1SFpqZmJQa0Q2SjdzOXI0MXh1MW1mOCJ9";
 
         puppyRaffle.selectWinner();
         assertEq(puppyRaffle.tokenURI(0), expectedTokenUri);
@@ -212,5 +208,40 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.selectWinner();
         puppyRaffle.withdrawFees();
         assertEq(address(feeAddress).balance, expectedPrizeAmount);
+    }
+
+    function testAuditFeeOverflow() public playersEntered {
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+        //entraceFee = 25e18 to reach 18.44 for its 20%
+        //or enter n players with 1e18 until 18.44 in fees are over passed
+        uint256 expectedFee = (4 * entranceFee * 20) / 100;
+        puppyRaffle.selectWinner();
+        uint256 totalFees = puppyRaffle.totalFees();
+        assertNotEq(expectedFee, totalFees);
+    }
+
+    function testAuditDOSByEnteringRaffle() public {
+        //enter some player to ignore, array allocation
+        address[] memory aPlayer = new address[](1);
+        aPlayer[0] = address(100);
+        puppyRaffle.enterRaffle{value: aPlayer.length * entranceFee}(aPlayer);
+
+        address[] memory players = new address[](2);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+
+        uint256 firstJoinGasInit = gasleft();
+        puppyRaffle.enterRaffle{value: players.length * entranceFee}(players);
+        uint256 firstJoinCost = (firstJoinGasInit - gasleft());
+
+        players[0] = playerThree;
+        players[1] = playerFour;
+
+        uint256 secondJoinGasInit = gasleft();
+        puppyRaffle.enterRaffle{value: players.length * entranceFee}(players);
+        uint256 secondJoinCost = (secondJoinGasInit - gasleft());
+
+        assertGt(secondJoinCost, firstJoinCost);
     }
 }
