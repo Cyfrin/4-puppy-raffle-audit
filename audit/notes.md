@@ -1,4 +1,4 @@
-## PROTOCOL UNDERSTANDING
+## About
 
 - win a NFT
 - List of participants required to enter
@@ -6,7 +6,7 @@
 - Pick up randomly a winner every X time (seconds)
 - Retain a fee per winner round
 
-## Protocol
+## Protocol Details
 
 1. does solc is at 0.7.6 or up to it?
 2. Refunds: can it be anytime? or bounded?
