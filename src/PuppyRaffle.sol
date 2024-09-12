@@ -195,7 +195,9 @@ contract PuppyRaffle is ERC721, Ownable {
 
         delete players;
         raffleStartTime = block.timestamp;
+        //@audit Transaction reversion attack
         previousWinner = winner;
+        //@audit prize pool sending might fail
         (bool success, ) = winner.call{value: prizePool}("");
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
         _safeMint(winner, tokenId);

