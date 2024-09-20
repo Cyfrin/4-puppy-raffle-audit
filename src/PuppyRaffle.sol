@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.7.6;
+pragma solidity 0.8.21;
 //@audit old pragama version used, why?
 //@audit dynamic pragma version: use newest and seacure versions
 
@@ -71,7 +71,7 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 _entranceFee,
         address _feeAddress,
         uint256 _raffleDuration
-    ) ERC721("Puppy Raffle", "PR") {
+    ) ERC721("Puppy Raffle", "PR") Ownable(msg.sender) {
         entranceFee = _entranceFee;
         //@audit-advice: lack of zero address check
         feeAddress = _feeAddress;
@@ -179,7 +179,8 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 fee = (totalAmountCollected * 20) / 100;
         totalFees = totalFees + uint64(fee);
 
-        uint256 tokenId = totalSupply();
+        // uint256 tokenId = totalSupply();
+        uint256 tokenId = 1;
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
         uint256 rarity = uint256(
@@ -238,7 +239,7 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this could be a constant variable
-    function _baseURI() internal pure returns (string memory) {
+    function _baseURI() internal pure override returns (string memory) {
         return "data:application/json;base64,";
     }
 
@@ -247,10 +248,7 @@ contract PuppyRaffle is ERC721, Ownable {
     function tokenURI(
         uint256 tokenId
     ) public view virtual override returns (string memory) {
-        require(
-            _exists(tokenId),
-            "PuppyRaffle: URI query for nonexistent token"
-        );
+        require(tokenId > 0, "PuppyRaffle: URI query for nonexistent token");
 
         uint256 rarity = tokenIdToRarity[tokenId];
         string memory imageURI = rarityToUri[rarity];
