@@ -609,22 +609,23 @@ Here are some of recommendations, any one of that can be used to mitigate this r
 + mapping (address => uint256) public usersToRaffleId;
 .
 .
-function enterRaffle(address[] memory newPlayers) public payable {
+    function enterRaffle(address[] memory newPlayers) public payable {
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
-        for (uint256 i = 0; i < newPlayers.length; i++) {
-            players.push(newPlayers[i]);
-+           usersToRaffleId[newPlayers[i]] = true;
-        }
-        
-        // Check for duplicates
-+       for (uint256 i = 0; i < newPlayers.length; i++){
-+           require(usersToRaffleId[i] != raffleID, "PuppyRaffle: Already a participant");
 
--        for (uint256 i = 0; i < players.length - 1; i++) {
--            for (uint256 j = i + 1; j < players.length; j++) {
--                require(players[i] != players[j], "PuppyRaffle: Duplicate player");
--            }
+        for (uint256 i = 0; i < newPlayers.length; i++) {
++           // Check for duplicates
++           require(usersToRaffleId[newPlayers[i]] != raffleID, "PuppyRaffle: Already a participant");
+
+            players.push(newPlayers[i]);
++           usersToRaffleId[newPlayers[i]] = raffleID;
         }
+
+-       // Check for duplicates
+-       for (uint256 i = 0; i < players.length - 1; i++) {
+-           for (uint256 j = i + 1; j < players.length; j++) {
+-               require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+-           }
+-       }
 
         emit RaffleEnter(newPlayers);
     }
