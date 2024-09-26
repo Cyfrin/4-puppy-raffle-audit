@@ -57,6 +57,7 @@ Assisting Auditors:
     - [\[H-2\] Weak randomness in `PuppyRaffle::selectWinner` allows anyone to choose winner](#h-2-weak-randomness-in-puppyraffleselectwinner-allows-anyone-to-choose-winner)
     - [\[H-3\] Integer overflow of `PuppyRaffle::totalFees` loses fees](#h-3-integer-overflow-of-puppyraffletotalfees-loses-fees)
     - [\[H-4\] Malicious winner can forever halt the raffle](#h-4-malicious-winner-can-forever-halt-the-raffle)
+    - [\[H-5\] `PuppyRaffle::refund` does not update the length of the players array, which leads to a loss of fees and unability to pay out the winners](#h-5-puppyrafflerefund-does-not-update-the-length-of-the-players-array-which-leads-to-a-loss-of-fees-and-unability-to-pay-out-the-winners)
   - [Medium](#medium)
     - [\[M-1\] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector, incrementing gas costs for future entrants](#m-1-looping-through-players-array-to-check-for-duplicates-in-puppyraffleenterraffle-is-a-potential-dos-vector-incrementing-gas-costs-for-future-entrants)
     - [\[M-2\] Balance check on `PuppyRaffle::withdrawFees` enables griefers to selfdestruct a contract to send ETH to the raffle, blocking withdrawals](#m-2-balance-check-on-puppyrafflewithdrawfees-enables-griefers-to-selfdestruct-a-contract-to-send-eth-to-the-raffle-blocking-withdrawals)
@@ -403,6 +404,134 @@ contract AttackerContract {
 </details>
 
 **Recommended Mitigation:** Favor pull-payments over push-payments. This means modifying the `selectWinner` function so that the winner account has to claim the prize by calling a function, instead of having the contract automatically send the funds during execution of `selectWinner`.
+
+### [H-5] `PuppyRaffle::refund` does not update the length of the players array, which leads to a loss of fees and unability to pay out the winners
+
+**Description:** The `PuppyRaffle::refund` function does not update the length of the players array, which is used to determine the final prize pool at the `PuppyRaffle::selectWinner` function:
+```solidity
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
+        payable(msg.sender).sendValue(entranceFee);
+
+->      players[playerIndex] = address(0);
+        emit RaffleRefunded(playerAddress);
+    }
+```
+We reset the player's address to `address(0)`, but we don't update the length of the players array, that's used in the `PuppyRaffle::selectWinner` function:
+```solidity
+    function selectWinner() external {
+        ...
+->      uint256 totalAmountCollected = players.length * entranceFee;
+        uint256 prizePool = (totalAmountCollected * 80) / 100;
+        uint256 fee = (totalAmountCollected * 20) / 100;
+        ...
+    }
+```
+We also don't check that the winner is not `address(0)` in the `PuppyRaffle::selectWinner` function. That means that a zero address could be selected as winner, and the contract would send the prize pool to the zero address.
+
+**Impact:** This could not only lead to a loss of fees (the contract will pay the winner more than it was supposed to) but also to a loss of the ability to pay out the winners, as the contract won't have enough funds to do so.
+
+**Proof of Concept:** We can write two test functions, one would check the scenario of the loss of fees, and the other one would check the scenario of the loss of the ability to pay out the winners. We also will change the require in the `PuppyRaffle::selectWinner` function to make the revert message more clear: 
+```solidity
+    function withdrawFees() external {
+->      require(address(this).balance >= uint256(totalFees), "PuppyRaffle: The balance is too low!");
+        uint256 feesToWithdraw = totalFees;
+        totalFees = 0;
+        (bool success,) = feeAddress.call{value: feesToWithdraw}("");
+        require(success, "PuppyRaffle: Failed to withdraw fees");
+    }
+```
+We would also need to create a getter function to get the length of the players array in the `PuppyRaffle` contract:
+```solidity
+    function getPlayersLength() public view returns (uint256) {
+        return players.length;
+    }
+```
+The first test function would look like this:
+```solidity
+    function testRefundLossOfFees() public {
+        address[] memory players = new address[](5);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        players[4] = address(5);
+        puppyRaffle.enterRaffle{value: entranceFee * 5}(players);
+        uint256 indexOfPlayer = puppyRaffle.getActivePlayerIndex(playerOne);
+        vm.prank(playerOne);
+        puppyRaffle.refund(indexOfPlayer);
+        vm.stopPrank();
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        puppyRaffle.selectWinner();
+
+        vm.expectRevert("PuppyRaffle: The balance is too low!");
+        puppyRaffle.withdrawFees();
+    }
+```
+It passes, meaning that we lost fees and can't withdraw them.
+The second function would look like this:
+```solidity
+    function testUnableToPayoutTheWinner() public {
+        address[] memory players = new address[](5);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        players[4] = address(5);
+        puppyRaffle.enterRaffle{value: entranceFee * 5}(players);
+        uint256 indexOfPlayerOne = puppyRaffle.getActivePlayerIndex(playerOne);
+        uint256 indexOfPlayerFour = puppyRaffle.getActivePlayerIndex(playerFour);
+        vm.prank(playerOne);
+        puppyRaffle.refund(indexOfPlayerOne);
+        vm.stopPrank();
+        vm.prank(playerFour);
+        puppyRaffle.refund(indexOfPlayerFour);
+        vm.stopPrank();
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        console.log("PuppyRaffle balance: %d", address(puppyRaffle).balance);
+        console.log("Expected payout as per selectWinner function behaviour: %d", (puppyRaffle.getPlayersLength() * entranceFee) * 80 / 100);
+        vm.expectRevert("PuppyRaffle: Failed to send prize pool to winner");
+        puppyRaffle.selectWinner();
+    }
+```
+The test passes, meaning that we can't send funds to the winner. By checking the logs we can see that we have insufficient funds to pay out the winner:
+```
+Logs:
+  PuppyRaffle balance: 3000000000000000000
+  Expected payout as per selectWinner function behaviour: 4000000000000000000
+```
+
+**Recommended Mitigation:** You should update the length of the players array and don't add any `address(0)` to the array in the `PuppyRaffle::refund` function. It would look like this:
+```solidity
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
+        payable(msg.sender).sendValue(entranceFee);
+
+        players[playerIndex] = players[players.length - 1];
+        players.pop();
+        emit RaffleRefunded(playerAddress);
+    }
+```
+It would also be the best just to get the `totalAmountCollected` variable as follows:
+```solidity
+    function selectWinner() external {
+        ...
+->      uint256 totalAmountCollected = address(this).balance;
+        uint256 prizePool = (totalAmountCollected * 80) / 100;
+        uint256 fee = (totalAmountCollected * 20) / 100;
+        ...
+    }
+```
 
 ## Medium
 
