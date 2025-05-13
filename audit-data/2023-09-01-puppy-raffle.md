@@ -406,17 +406,28 @@ contract AttackerContract {
 
 ## Medium
 
-### [M-1] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector, incrementing gas costs for future entrants
+### [M-1] Looping through `players` array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential DoS vector and causes errors when `raffleId = 0`
 
-**Description:** The `PuppyRaffle::enterRaffle` function loops through the `players` array to check for duplicates. However, the longer the `PuppyRaffle:players` array is, the more checks a new player will have to make. This means that the gas costs for players who enter right when the raffle starts will be dramatically lower than those who enter later. Every additional address in the `players` array, is an additional check the loop will have to make. 
+**Description:** The `PuppyRaffle::enterRaffle` function loops through the `players` array to check for duplicates. This introduces two main problems:
+
+1. Gas DoS Vector:
+   The longer the `players` array becomes, the more checks must be performed, increasing the gas cost for later entrants. This creates a potential DoS vector and introduces unfair gas pricing between early and late participants.
+
+2. Incorrect Duplicate Detection When `raffleId = 0`:
+   The refactored version uses a `mapping(address => uint256)` to track players per raffle. However, since Solidity mappings return `0` by default, initializing `raffleId` to `0` results in false duplicate errors. For example, even a fresh player will be seen as a duplicate if `raffleId == 0`.
+
+3. Incorrect Loop Order in Refactor:
+   The duplicate check is done after updating `players[]` and `addressToRaffleId`, which causes the duplicate detection to always fail. The logic must be reordered to perform the check before updating state.
 
 **Note to students: This next line would likely be it's own finding itself. However, we haven't taught you about MEV yet, so we are going to ignore it.**
 Additionally, this increased gas cost creates front-running opportunities where malicious users can front-run another raffle entrant's transaction, increasing its costs, so their enter transaction fails. 
 
-**Impact:** The impact is two-fold.
+**Impact:**
 
 1. The gas costs for raffle entrants will greatly increase as more players enter the raffle.
 2. Front-running opportunities are created for malicious users to increase the gas costs of other users, so their transaction fails.
+3. False Rejection of Players: New players are incorrectly rejected when `raffleId` is `0` due to default mapping values.
+4. Broken Logic in Refactor: When using the mapping approach, incorrect loop ordering introduces a false duplicate check.
 
 **Proof of Concept:** 
 
@@ -481,22 +492,21 @@ function testReadDuplicateGasCosts() public {
 
 1. Consider allowing duplicates. Users can make new wallet addresses anyways, so a duplicate check doesn't prevent the same person from entering multiple times, only the same wallet address.
 2. Consider using a mapping to check duplicates. This would allow you to check for duplicates in constant time, rather than linear time. You could have each raffle have a `uint256` id, and the mapping would be a player address mapped to the raffle Id. 
+3. Use a mapping to track participation: `mapping(address => uint256) public addressToRaffleId`. 
+4. Initialize `raffleId` to 1, not 0, to avoid conflict with default mapping value.
+5. Perform the duplicate check before pushing to the `players[]` array or updating the mapping.
 
 ```diff
 +    mapping(address => uint256) public addressToRaffleId;
-+    uint256 public raffleId = 0;
++    uint256 public raffleId = 1; //  Avoids default 0 issue
     .
     .
     .
     function enterRaffle(address[] memory newPlayers) public payable {
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
-        for (uint256 i = 0; i < newPlayers.length; i++) {
-            players.push(newPlayers[i]);
-+            addressToRaffleId[newPlayers[i]] = raffleId;            
-        }
-
 -        // Check for duplicates
 +       // Check for duplicates only from the new players
++        //  Check first
 +       for (uint256 i = 0; i < newPlayers.length; i++) {
 +          require(addressToRaffleId[newPlayers[i]] != raffleId, "PuppyRaffle: Duplicate player");
 +       }    
@@ -505,13 +515,19 @@ function testReadDuplicateGasCosts() public {
 -                require(players[i] != players[j], "PuppyRaffle: Duplicate player");
 -            }
 -        }
++        // Then update
+        for (uint256 i = 0; i < newPlayers.length; i++) {
+            players.push(newPlayers[i]);
++            addressToRaffleId[newPlayers[i]] = raffleId;            
+        }
+
         emit RaffleEnter(newPlayers);
     }
 .
 .
 .
     function selectWinner() external {
-+       raffleId = raffleId + 1;
++       raffleId = raffleId + 1; // Increment for next round
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
 ```
 
