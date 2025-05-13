@@ -77,19 +77,21 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
-        require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
-        for (uint256 i = 0; i < newPlayers.length; i++) {
-            players.push(newPlayers[i]);
-        }
+    require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
 
-        // Check for duplicates
-        for (uint256 i = 0; i < players.length - 1; i++) {
-            for (uint256 j = i + 1; j < players.length; j++) {
-                require(players[i] != players[j], "PuppyRaffle: Duplicate player");
-            }
-        }
-        emit RaffleEnter(newPlayers);
+    // ✅ Check for duplicates first (before adding)
+    for (uint256 i = 0; i < newPlayers.length; i++) {
+        require(addressToRaffleId[newPlayers[i]] != raffleId, "PuppyRaffle: Duplicate player");
     }
+
+    for (uint256 i = 0; i < newPlayers.length; i++) {
+        players.push(newPlayers[i]);
+        addressToRaffleId[newPlayers[i]] = raffleId;
+    }
+
+    emit RaffleEnter(newPlayers);
+}
+
 
     /// @param playerIndex the index of the player to refund. You can find it externally by calling `getActivePlayerIndex`
     /// @dev This function will allow there to be blank spots in the array
