@@ -34,6 +34,11 @@ contract PuppyRaffle is ERC721, Ownable {
     mapping(uint256 => string) public rarityToUri;
     mapping(uint256 => string) public rarityToName;
 
+    // mapping to keep track of players
+    mapping(address => bool) private tempSeen;
+    uint256 public raffleId = 0;
+    mapping(address => uint256) public addressToRaffleId;
+
     // Stats for the common puppy (pug)
     string private commonImageUri = "ipfs://QmSsYRx3LpDAb1GZQm7zZ1AuHZjfbPkD6J7s9r41xu1mf8";
     uint256 public constant COMMON_RARITY = 70;
@@ -77,21 +82,26 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
-    require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
+        require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
 
-    // ✅ Check for duplicates first (before adding)
-    for (uint256 i = 0; i < newPlayers.length; i++) {
-        require(addressToRaffleId[newPlayers[i]] != raffleId, "PuppyRaffle: Duplicate player");
+        for (uint256 i = 0; i < newPlayers.length; i++) {
+            address player = newPlayers[i];
+
+            require(addressToRaffleId[player] != raffleId, "PuppyRaffle: Already entered");
+            require(!tempSeen[player], "PuppyRaffle: Duplicate in batch");
+
+            tempSeen[player] = true;
+        }
+
+        for (uint256 i = 0; i < newPlayers.length; i++) {
+            address player = newPlayers[i];
+            players.push(player);
+            addressToRaffleId[player] = raffleId;
+            tempSeen[player] = false; // clean up for next call
+        }
+
+        emit RaffleEnter(newPlayers);
     }
-
-    for (uint256 i = 0; i < newPlayers.length; i++) {
-        players.push(newPlayers[i]);
-        addressToRaffleId[newPlayers[i]] = raffleId;
-    }
-
-    emit RaffleEnter(newPlayers);
-}
-
 
     /// @param playerIndex the index of the player to refund. You can find it externally by calling `getActivePlayerIndex`
     /// @dev This function will allow there to be blank spots in the array
