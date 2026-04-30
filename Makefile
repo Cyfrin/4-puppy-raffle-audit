@@ -10,7 +10,7 @@ all: remove install build
 clean  :; forge clean
 
 # Remove modules
-remove :; rm -rf .gitmodules && rm -rf .git/modules/* && rm -rf lib && touch .gitmodules && git add . && git commit -m "modules"
+remove :; rm -rf .gitmodules && rm -rf .git/modules/* && rm -rf lib && touch .gitmodules
 
 install :; forge install foundry-rs/forge-std@v1.3.0 && forge install openzeppelin/openzeppelin-contracts@v3.4.0 && forge install Brechtpd/base64
 
