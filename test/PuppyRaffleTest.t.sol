@@ -213,4 +213,36 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.withdrawFees();
         assertEq(address(feeAddress).balance, expectedPrizeAmount);
     }
+
+    function testReadDuplicateGasCosts() public {
+
+        // We will enter 100 players into the raffle
+        uint256 playersNum = 100;
+        address[] memory players = new address[](playersNum);
+        for (uint256 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+        // And see how much gas it cost to enter
+        uint256 gasStart = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+        uint256 gasEnd = gasleft();
+        uint256 gasUsedFirst = (gasStart - gasEnd) * tx.gasprice;
+        console.log("Gas cost of the 1st 100 players:", gasUsedFirst);
+
+        // We will enter 5 more players into the raffle
+        for (uint256 i = 0; i < playersNum; i++) {
+            players[i] = address(i + playersNum);
+        }
+        // And see how much more expensive it is
+        gasStart = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+        gasEnd = gasleft();
+        uint256 gasUsedSecond = (gasStart - gasEnd) * tx.gasprice;
+        console.log("Gas cost of the 2nd 100 players:", gasUsedSecond);
+
+        assert(gasUsedFirst < gasUsedSecond);
+        // Logs:
+        //     Gas cost of the 1st 100 players: 6251420
+        //     Gas cost of the 2nd 100 players: 18066229
+    }
 }

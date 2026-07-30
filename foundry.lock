@@ -1,0 +1,20 @@
+{
+  "lib/base64": {
+    "tag": {
+      "name": "v1.1.0",
+      "rev": "dcbf852ba545b3d15de0ac0ef88dce934c090c8e"
+    }
+  },
+  "lib/forge-std": {
+    "tag": {
+      "name": "v1.3.0",
+      "rev": "066ff16c5c03e6f931cd041fd366bc4be1fae82a"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v3.4.0",
+      "rev": "fa64a1ced0b70ab89073d5d0b6e01b0778f7e7d6"
+    }
+  }
+}
